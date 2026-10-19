@@ -98,18 +98,18 @@ Pre-packaged configurations for the most popular developer tools in the AI ecosy
 
 ```mermaid
 graph TD
-    User([Developer]) -->|Click Link in Chat| Antigravity[Antigravity 2.0 IDE]
-    Antigravity -->|Aux Pane Webview| WebUI[Studio SPA HTML/CSS/JS]
+    User(["Developer"]) -->|Click Link in Chat| Antigravity["Antigravity 2.0 IDE"]
+    Antigravity -->|Aux Pane Webview| WebUI["Studio SPA HTML/CSS/JS"]
     
-    subgraph Sidecar Local Runtime (Port: 38292)
-        WebUI -->|REST API| Server[Pure Node.js server.js]
-        Server -->|Config Persistence| LocalConfig[~/.gemini/config/mcp_config.json]
-        Server -->|Skill Parser & Creator| LocalSkills[~/.gemini/config/skills/]
-        Server -->|Handshake Process| ProbeEngine[JSON-RPC Probe Engine]
+    subgraph SidecarRuntime["Sidecar Local Runtime (Port: 38292)"]
+        WebUI -->|REST API| Server["Pure Node.js server.js"]
+        Server -->|Config Persistence| LocalConfig["~/.gemini/config/mcp_config.json"]
+        Server -->|Skill Parser & Creator| LocalSkills["~/.gemini/config/skills/"]
+        Server -->|Handshake Process| ProbeEngine["JSON-RPC Probe Engine"]
     end
     
-    ProbeEngine -->|stdio handshake| MCPServers[External MCP Servers (npx/python/node)]
-    LocalConfig -->|Hot Reload| GeminiEngine[Antigravity Core Agent]
+    ProbeEngine -->|stdio handshake| MCPServers["External MCP Servers (npx/python/node)"]
+    LocalConfig -->|Hot Reload| GeminiEngine["Antigravity Core Agent"]
     LocalSkills -->|Progressive Disclosure| GeminiEngine
 ```
 

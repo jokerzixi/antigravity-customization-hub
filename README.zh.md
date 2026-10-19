@@ -97,18 +97,18 @@
 
 ```mermaid
 graph TD
-    User([开发者]) -->|点击侧边栏链接| Antigravity[Antigravity 2.0 IDE]
-    Antigravity -->|Aux Pane 渲染| WebUI[SPA 扩展中心前端 HTML/CSS/JS]
+    User(["开发者"]) -->|点击侧边栏链接| Antigravity["Antigravity 2.0 IDE"]
+    Antigravity -->|Aux Pane 渲染| WebUI["SPA 扩展中心前端 HTML/CSS/JS"]
     
-    subgraph Sidecar 本地运行时 (Port: 38292)
-        WebUI -->|REST API| Server[Node.js 原生后端 server.js]
-        Server -->|读写配置| LocalConfig[~/.gemini/config/mcp_config.json]
-        Server -->|解析/创建| LocalSkills[~/.gemini/config/skills/]
-        Server -->|子进程握手| ProbeEngine[JSON-RPC 探针引擎]
+    subgraph SidecarRuntime["Sidecar 本地运行时 (Port: 38292)"]
+        WebUI -->|REST API| Server["Node.js 原生后端 server.js"]
+        Server -->|读写配置| LocalConfig["~/.gemini/config/mcp_config.json"]
+        Server -->|解析/创建| LocalSkills["~/.gemini/config/skills/"]
+        Server -->|子进程握手| ProbeEngine["JSON-RPC 探针引擎"]
     end
     
-    ProbeEngine -->|stdio 通信| MCPServers[外部 MCP 服务 (npx/python/node)]
-    LocalConfig -->|自动加载| GeminiEngine[Antigravity 核心 Agent]
+    ProbeEngine -->|stdio 通信| MCPServers["外部 MCP 服务 (npx/python/node)"]
+    LocalConfig -->|自动加载| GeminiEngine["Antigravity 核心 Agent"]
     LocalSkills -->|渐进式披露| GeminiEngine
 ```
 
