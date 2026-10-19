@@ -379,7 +379,7 @@ function testMcpServer(command, args, envVars, timeoutMs = 7000) {
 }
 
 // HTTP 请求分发
-const server = http.createServer(async (req, res) => {
+const requestHandler = async (req, res) => {
     const parsedUrl = url.parse(req.url, true);
     const pathname = parsedUrl.pathname || '/';
     const cleanPath = pathname.replace(/\/+/g, '/');
@@ -720,9 +720,25 @@ ${tmpl.content}
         res.writeHead(404);
         res.end('Not Found');
     }
-});
+};
 
+const server = http.createServer(requestHandler);
 server.listen(PORT, '127.0.0.1', () => {
     log(`Antigravity Studio server listening on 127.0.0.1:${PORT}`);
     console.log(`[+] Studio Server is running at http://127.0.0.1:${PORT}`);
 });
+
+const FIXED_PORT = 38292;
+if (PORT !== FIXED_PORT) {
+    try {
+        const fixedServer = http.createServer(requestHandler);
+        fixedServer.listen(FIXED_PORT, '127.0.0.1', () => {
+            log(`Fixed port fallback server listening on 127.0.0.1:${FIXED_PORT}`);
+        });
+        fixedServer.on('error', (err) => {
+            log('Fixed port notice:', err.message);
+        });
+    } catch (e) {
+        log('Error starting fixed port fallback server:', e);
+    }
+}

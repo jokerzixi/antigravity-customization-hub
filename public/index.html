@@ -569,7 +569,7 @@ body.dark-theme {
     font-size: 13px;
 }
 
-</style>
+    </style>
 </head>
 <body class="dark-theme">
     <div id="app">
@@ -788,19 +788,33 @@ body.dark-theme {
 
     <!-- 提示消息 Toast -->
     <div id="toast" class="toast"></div>
-
     <script>
 
-const __STUDIO_BASE__ = (window.location.protocol.startsWith('http') && window.location.host) 
-    ? window.location.origin 
-    : (window.__STUDIO_ORIGIN__ || 'http://127.0.0.1:38292');
+// Antigravity Webview & Standalone Origin / Token Adapter
+(function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sidecarToken = urlParams.get('token') || '';
+    const studioOrigin = (window.location.protocol.startsWith('http') && window.location.host)
+        ? window.location.origin
+        : (window.__STUDIO_ORIGIN__ || 'http://127.0.0.1:38292');
 
-function __API__(p) {
-    if (window.location.protocol.startsWith('http') && window.location.host) {
-        return p;
-    }
-    return __STUDIO_BASE__ + (p.startsWith('/') ? p : '/' + p);
-}
+    const origFetch = window.fetch;
+    window.fetch = function(input, init) {
+        if (typeof input === 'string') {
+            let url = input;
+            if (url.startsWith('/api/')) {
+                if (!window.location.protocol.startsWith('http') || !window.location.host) {
+                    url = studioOrigin + url;
+                }
+                if (sidecarToken && !url.includes('token=')) {
+                    url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(sidecarToken);
+                }
+            }
+            return origFetch.call(this, url, init);
+        }
+        return origFetch.call(this, input, init);
+    };
+})();
 
 // Antigravity Skill & MCP Studio - Frontend Controller
 
@@ -852,7 +866,7 @@ async function loadAllData() {
 // 1. 系统信息
 async function loadInfo() {
     try {
-        const res = await fetch(__API__('/api/info');
+        const res = await fetch('/api/info');
         const data = await res.json();
         if (data.workspaces && data.workspaces.length > 0) {
             const wsSelect = document.getElementById('workspace-select');
@@ -872,7 +886,7 @@ async function loadInfo() {
 // 2. 加载 MCP 服务
 async function loadMcp() {
     try {
-        const res = await fetch(__API__('/api/mcp');
+        const res = await fetch('/api/mcp');
         const data = await res.json();
         allMcpServers = data.servers || [];
         document.getElementById('mcp-count').innerText = allMcpServers.length;
@@ -886,7 +900,7 @@ async function loadSkills() {
     try {
         const ws = document.getElementById('workspace-select').value;
         const q = ws ? `?workspace=${encodeURIComponent(ws)}` : '';
-        const res = await fetch(__API__(`/api/skills${q}`);
+        const res = await fetch(`/api/skills${q}`);
         const data = await res.json();
         allSkills = data.skills || [];
         document.getElementById('skills-count').innerText = allSkills.length;
@@ -898,7 +912,7 @@ async function loadSkills() {
 // 4. 加载模版库
 async function loadTemplates() {
     try {
-        const res = await fetch(__API__('/api/templates');
+        const res = await fetch('/api/templates');
         const data = await res.json();
         allTemplates = data.templates || { mcp: [], skills: [] };
         renderTemplates();
@@ -1115,7 +1129,7 @@ document.getElementById('btn-save-mcp').addEventListener('click', async (e) => {
         if (k) env[k] = v;
     });
 
-    const res = await fetch(__API__('/api/mcp/save', {
+    const res = await fetch('/api/mcp/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, command, args, env })
@@ -1153,7 +1167,7 @@ document.getElementById('btn-test-mcp').addEventListener('click', async () => {
     resEl.className = 'test-result';
     resEl.innerText = '正在启动子进程并进行 JSON-RPC 握手探针测试...';
 
-    const res = await fetch(__API__('/api/mcp/test', {
+    const res = await fetch('/api/mcp/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command, args, env })
@@ -1189,7 +1203,7 @@ async function quickTestMcp(name) {
 
 async function deleteMcp(name) {
     if (!confirm(`确定要删除 MCP 服务 "${name}" 吗？`)) return;
-    const res = await fetch(__API__('/api/mcp/delete', {
+    const res = await fetch('/api/mcp/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name })
@@ -1230,7 +1244,7 @@ document.getElementById('btn-save-skill').addEventListener('click', async (e) =>
         return;
     }
 
-    const res = await fetch(__API__('/api/skills/save', {
+    const res = await fetch('/api/skills/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, description, content, scope, workspacePath })
@@ -1254,7 +1268,7 @@ function viewSkill(id) {
 async function deleteSkill(id, scope) {
     if (!confirm(`确定要删除技能 "${id}" 吗？此操作将移除其整个技能目录。`)) return;
     const workspacePath = document.getElementById('workspace-select').value;
-    const res = await fetch(__API__('/api/skills/delete', {
+    const res = await fetch('/api/skills/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, scope, workspacePath })
@@ -1299,7 +1313,7 @@ function startInstallTemplate(type, templateId) {
 
 async function confirmInstallTemplate(type, templateId, customValues) {
     showToast(`正在安装模版...`);
-    const res = await fetch(__API__('/api/templates/install', {
+    const res = await fetch('/api/templates/install', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, templateId, customValues })
@@ -1341,6 +1355,6 @@ document.getElementById('btn-confirm-tmpl').addEventListener('click', () => {
 // 页面初始化
 loadAllData();
 
-</script>
+    </script>
 </body>
 </html>
