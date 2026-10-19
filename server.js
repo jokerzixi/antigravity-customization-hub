@@ -381,7 +381,9 @@ function testMcpServer(command, args, envVars, timeoutMs = 7000) {
 // HTTP 请求分发
 const server = http.createServer(async (req, res) => {
     const parsedUrl = url.parse(req.url, true);
-    const pathname = parsedUrl.pathname;
+    const pathname = parsedUrl.pathname || '/';
+    const cleanPath = pathname.replace(/\/+/g, '/');
+    const isPath = (route) => cleanPath === route || cleanPath.endsWith(route);
 
     // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -414,7 +416,7 @@ const server = http.createServer(async (req, res) => {
     // --- API 路由 ---
 
     // 1. 系统概览与环境
-    if (pathname === '/api/info' && req.method === 'GET') {
+    if (isPath('/api/info') && req.method === 'GET') {
         return sendJson({
             app: 'Antigravity Skill & MCP Studio',
             version: '1.0.0',
@@ -427,7 +429,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 2. 获取所有 MCP 服务
-    if (pathname === '/api/mcp' && req.method === 'GET') {
+    if (isPath('/api/mcp') && req.method === 'GET') {
         const config = readJsonSafe(GLOBAL_MCP_FILE, { mcpServers: {} });
         const list = [];
         const servers = config.mcpServers || {};
@@ -445,7 +447,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 3. 保存或更新 MCP 服务
-    if (pathname === '/api/mcp/save' && req.method === 'POST') {
+    if (isPath('/api/mcp/save') && req.method === 'POST') {
         const body = await readBody();
         const { name, command, args, env, disabled } = body;
         if (!name || !command) {
@@ -470,7 +472,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 4. 删除 MCP 服务
-    if (pathname === '/api/mcp/delete' && req.method === 'POST') {
+    if (isPath('/api/mcp/delete') && req.method === 'POST') {
         const body = await readBody();
         const { name } = body;
         if (!name) return sendJson({ success: false, error: '缺少服务名称' }, 400);
@@ -486,7 +488,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 5. 测试 MCP 服务握手与工具探测
-    if (pathname === '/api/mcp/test' && req.method === 'POST') {
+    if (isPath('/api/mcp/test') && req.method === 'POST') {
         const body = await readBody();
         const { command, args, env } = body;
         if (!command) return sendJson({ success: false, error: '命令不能为空' }, 400);
@@ -496,7 +498,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 6. 获取所有技能列表 (全局 + 内置 + 当前工作区)
-    if (pathname === '/api/skills' && req.method === 'GET') {
+    if (isPath('/api/skills') && req.method === 'GET') {
         const list = [];
 
         // 全局技能
@@ -570,7 +572,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 7. 保存或新建技能
-    if (pathname === '/api/skills/save' && req.method === 'POST') {
+    if (isPath('/api/skills/save') && req.method === 'POST') {
         const body = await readBody();
         const { name, description, content, scope, workspacePath } = body;
         if (!name) return sendJson({ success: false, error: '技能名称 (name) 不能为空' }, 400);
@@ -597,7 +599,7 @@ ${content || ''}
     }
 
     // 8. 删除技能
-    if (pathname === '/api/skills/delete' && req.method === 'POST') {
+    if (isPath('/api/skills/delete') && req.method === 'POST') {
         const body = await readBody();
         const { id, scope, workspacePath } = body;
         if (!id) return sendJson({ success: false, error: '缺少技能 ID' }, 400);
@@ -616,12 +618,12 @@ ${content || ''}
     }
 
     // 9. 获取预设模版列表
-    if (pathname === '/api/templates' && req.method === 'GET') {
+    if (isPath('/api/templates') && req.method === 'GET') {
         return sendJson({ success: true, templates: PRESET_TEMPLATES });
     }
 
     // 10. 一键安装模版
-    if (pathname === '/api/templates/install' && req.method === 'POST') {
+    if (isPath('/api/templates/install') && req.method === 'POST') {
         const body = await readBody();
         const { type, templateId, customValues } = body;
 
@@ -683,8 +685,12 @@ ${tmpl.content}
     }
 
     // --- 静态文件托管 ---
-    let filePath = path.join(__dirname, 'public', pathname === '/' ? 'index.html' : pathname.slice(1));
-    if (!fs.existsSync(filePath)) {
+    let filePath;
+    if (cleanPath.endsWith('.css')) {
+        filePath = path.join(__dirname, 'public', 'style.css');
+    } else if (cleanPath.endsWith('.js') && !cleanPath.includes('/api/')) {
+        filePath = path.join(__dirname, 'public', 'app.js');
+    } else {
         filePath = path.join(__dirname, 'public', 'index.html');
     }
 
@@ -699,8 +705,16 @@ ${tmpl.content}
     };
 
     try {
-        const content = fs.readFileSync(filePath);
-        res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'text/plain' });
+        let content = fs.readFileSync(filePath);
+        if (ext === '.html') {
+            let htmlStr = content.toString('utf-8');
+            htmlStr = htmlStr.replace('<head>', `<head><script>window.__STUDIO_ORIGIN__ = "http://127.0.0.1:${PORT}";</script>`);
+            content = Buffer.from(htmlStr, 'utf-8');
+        }
+        res.writeHead(200, { 
+            'Content-Type': mimeTypes[ext] || 'text/plain',
+            'Access-Control-Allow-Origin': '*'
+        });
         res.end(content);
     } catch (e) {
         res.writeHead(404);
