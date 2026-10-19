@@ -1,0 +1,17 @@
+{
+  "command": "node",
+  "args": ["server.js"],
+  "description": "Antigravity 技能 (Skill) 与 MCP 服务可视化管理中心，支持一键配置、免终端测试与热重载",
+  "display_name": "扩展中心 (Skill & MCP)",
+  "has_web_ui": true,
+  "ui_config": {
+    "display_name": "扩展中心",
+    "views": [
+      {
+        "title": "Skill & MCP Studio",
+        "path": "/",
+        "entrypoint": "SIDECAR_UI_ENTRYPOINT_AUX_PANE"
+      }
+    ]
+  }
+}

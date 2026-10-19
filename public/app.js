@@ -1,0 +1,538 @@
+// Antigravity Skill & MCP Studio - Frontend Controller
+
+let currentTab = 'mcp';
+let allMcpServers = [];
+let allSkills = [];
+let allTemplates = { mcp: [], skills: [] };
+let activeTemplateInstall = null;
+
+// Toast 提示
+function showToast(msg, duration = 3000) {
+    const toast = document.getElementById('toast');
+    toast.innerText = msg;
+    toast.style.display = 'block';
+    setTimeout(() => {
+        toast.style.display = 'none';
+    }, duration);
+}
+
+// 选项卡切换
+document.querySelectorAll('.tab-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-item').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+
+        btn.classList.add('active');
+        const tab = btn.getAttribute('data-tab');
+        currentTab = tab;
+        document.getElementById(`pane-${tab}`).classList.add('active');
+
+        // 控制搜索栏和工作区筛选的可见性
+        const wsWrap = document.getElementById('scope-selector-wrap');
+        if (tab === 'skills') {
+            wsWrap.style.display = 'flex';
+        } else {
+            wsWrap.style.display = 'none';
+        }
+
+        filterAndRender();
+    });
+});
+
+// 加载全部数据
+async function loadAllData() {
+    await Promise.all([loadInfo(), loadMcp(), loadSkills(), loadTemplates()]);
+    filterAndRender();
+}
+
+// 1. 系统信息
+async function loadInfo() {
+    try {
+        const res = await fetch('/api/info');
+        const data = await res.json();
+        if (data.workspaces && data.workspaces.length > 0) {
+            const wsSelect = document.getElementById('workspace-select');
+            wsSelect.innerHTML = '<option value="">🌐 全局模式 (~/.gemini/config)</option>';
+            data.workspaces.forEach(ws => {
+                const opt = document.createElement('option');
+                opt.value = ws;
+                opt.innerText = `📁 ${ws.split(/[\\/]/).pop()} (${ws})`;
+                wsSelect.appendChild(opt);
+            });
+        }
+    } catch (e) {
+        console.error('Failed to load info:', e);
+    }
+}
+
+// 2. 加载 MCP 服务
+async function loadMcp() {
+    try {
+        const res = await fetch('/api/mcp');
+        const data = await res.json();
+        allMcpServers = data.servers || [];
+        document.getElementById('mcp-count').innerText = allMcpServers.length;
+    } catch (e) {
+        showToast('加载 MCP 服务配置失败');
+    }
+}
+
+// 3. 加载技能列表
+async function loadSkills() {
+    try {
+        const ws = document.getElementById('workspace-select').value;
+        const q = ws ? `?workspace=${encodeURIComponent(ws)}` : '';
+        const res = await fetch(`/api/skills${q}`);
+        const data = await res.json();
+        allSkills = data.skills || [];
+        document.getElementById('skills-count').innerText = allSkills.length;
+    } catch (e) {
+        showToast('加载技能列表失败');
+    }
+}
+
+// 4. 加载模版库
+async function loadTemplates() {
+    try {
+        const res = await fetch('/api/templates');
+        const data = await res.json();
+        allTemplates = data.templates || { mcp: [], skills: [] };
+        renderTemplates();
+    } catch (e) {
+        showToast('加载模版库失败');
+    }
+}
+
+// 渲染 MCP 列表
+function renderMcp(list) {
+    const container = document.getElementById('mcp-list');
+    if (!list || list.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <p>暂无配置的 MCP 服务</p>
+                <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="openAddMcpModal()">
+                    + 点击立即添加第一个 MCP 服务
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = list.map(s => `
+        <div class="hub-card" data-name="${s.name}">
+            <div class="card-top">
+                <div class="card-header-main">
+                    <span class="card-badge-status" title="就绪"></span>
+                    <span class="card-title">${s.name}</span>
+                    <span class="card-scope-tag">Global</span>
+                </div>
+                <div class="card-actions">
+                    <button class="btn btn-secondary btn-xs" onclick="quickTestMcp('${s.name}')">🧪 探针测试</button>
+                    <button class="btn btn-secondary btn-xs" onclick="editMcp('${s.name}')">⚙️ 配置</button>
+                    <button class="btn btn-danger btn-xs" onclick="deleteMcp('${s.name}')">🗑️</button>
+                </div>
+            </div>
+            <div class="card-cmd-preview">${s.command} ${(s.args || []).join(' ')}</div>
+            <div class="card-meta">
+                <span>环境变量: ${Object.keys(s.env || {}).length} 个</span>
+                <span>传输协议: stdio</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+// 渲染技能列表
+function renderSkills(list) {
+    const container = document.getElementById('skills-list');
+    if (!list || list.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <p>未找到匹配的智能体技能</p>
+                <button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="openAddSkillModal()">
+                    + 编写一个新技能
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = list.map(s => `
+        <div class="hub-card" data-id="${s.id}">
+            <div class="card-top">
+                <div class="card-header-main">
+                    <span class="card-badge-status ${s.isBuiltin ? 'builtin' : ''}" title="${s.isBuiltin ? '内置系统技能' : '自定义技能'}"></span>
+                    <span class="card-title">${s.name}</span>
+                    <span class="card-scope-tag">${s.scope}</span>
+                </div>
+                <div class="card-actions">
+                    <button class="btn btn-secondary btn-xs" onclick="viewSkill('${s.id}')">👁️ 查看指南</button>
+                    ${!s.isBuiltin ? `<button class="btn btn-danger btn-xs" onclick="deleteSkill('${s.id}', '${s.scope}')">🗑️</button>` : ''}
+                </div>
+            </div>
+            <div class="card-desc">${s.description}</div>
+            <div class="card-meta">
+                <span>${s.isBuiltin ? '🔒 系统内置技能' : '✏️ 自定义技能'}</span>
+                <span>路径: ${s.path.split(/[\\/]/).slice(-2).join('/')}</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+// 渲染模版库
+function renderTemplates() {
+    const mcpContainer = document.getElementById('templates-mcp-list');
+    const skillsContainer = document.getElementById('templates-skills-list');
+
+    if (mcpContainer && allTemplates.mcp) {
+        mcpContainer.innerHTML = allTemplates.mcp.map(t => `
+            <div class="hub-card">
+                <div class="card-top">
+                    <div class="card-header-main">
+                        <span class="card-title">${t.name}</span>
+                        <span class="card-scope-tag">${t.category}</span>
+                    </div>
+                    <button class="btn btn-primary btn-xs" onclick="startInstallTemplate('mcp', '${t.id}')">⚡ 一键安装</button>
+                </div>
+                <div class="card-desc">${t.description}</div>
+                <div class="card-cmd-preview">${t.command} ${t.args.join(' ')}</div>
+            </div>
+        `).join('');
+    }
+
+    if (skillsContainer && allTemplates.skills) {
+        skillsContainer.innerHTML = allTemplates.skills.map(t => `
+            <div class="hub-card">
+                <div class="card-top">
+                    <div class="card-header-main">
+                        <span class="card-title">${t.name}</span>
+                        <span class="card-scope-tag">Skill</span>
+                    </div>
+                    <button class="btn btn-primary btn-xs" onclick="startInstallTemplate('skill', '${t.id}')">⚡ 导入技能</button>
+                </div>
+                <div class="card-desc">${t.description}</div>
+            </div>
+        `).join('');
+    }
+}
+
+// 过滤与渲染
+function filterAndRender() {
+    const kw = (document.getElementById('search-input').value || '').toLowerCase().trim();
+
+    if (currentTab === 'mcp') {
+        const filtered = allMcpServers.filter(s => 
+            s.name.toLowerCase().includes(kw) ||
+            s.command.toLowerCase().includes(kw) ||
+            (s.args || []).join(' ').toLowerCase().includes(kw)
+        );
+        renderMcp(filtered);
+    } else if (currentTab === 'skills') {
+        const filtered = allSkills.filter(s =>
+            s.name.toLowerCase().includes(kw) ||
+            (s.description || '').toLowerCase().includes(kw)
+        );
+        renderSkills(filtered);
+    }
+}
+
+document.getElementById('search-input').addEventListener('input', filterAndRender);
+document.getElementById('workspace-select').addEventListener('change', async () => {
+    await loadSkills();
+    filterAndRender();
+});
+
+// 刷新按钮
+document.getElementById('btn-refresh').addEventListener('click', async () => {
+    showToast('正在重新加载最新配置...');
+    await loadAllData();
+    showToast('已更新到最新配置');
+});
+
+// 新增配置统一入口
+document.getElementById('btn-add-new').addEventListener('click', () => {
+    if (currentTab === 'skills') {
+        openAddSkillModal();
+    } else {
+        openAddMcpModal();
+    }
+});
+
+// --- MCP Modal 操作 ---
+function openAddMcpModal(existing = null) {
+    document.getElementById('modal-mcp-title').innerText = existing ? '编辑 MCP 服务' : '新增 MCP 服务';
+    document.getElementById('mcp-name').value = existing ? existing.name : '';
+    document.getElementById('mcp-name').disabled = !!existing;
+    document.getElementById('mcp-command').value = existing ? existing.command : '';
+    document.getElementById('mcp-args').value = existing ? (existing.args || []).join('\n') : '';
+    
+    const envContainer = document.getElementById('env-list');
+    envContainer.innerHTML = '';
+    if (existing && existing.env) {
+        for (const [k, v] of Object.entries(existing.env)) {
+            addEnvRow(k, v);
+        }
+    }
+
+    document.getElementById('mcp-test-result').style.display = 'none';
+    document.getElementById('modal-mcp').classList.add('active');
+}
+
+function addEnvRow(k = '', v = '') {
+    const row = document.createElement('div');
+    row.className = 'env-row';
+    row.innerHTML = `
+        <input type="text" placeholder="KEY (例如: API_KEY)" value="${k}" class="env-k" />
+        <input type="text" placeholder="VALUE" value="${v}" class="env-v" />
+        <button type="button" class="btn btn-icon" onclick="this.parentElement.remove()">✕</button>
+    `;
+    document.getElementById('env-list').appendChild(row);
+}
+document.getElementById('btn-add-env').addEventListener('click', () => addEnvRow());
+
+document.getElementById('btn-close-mcp').addEventListener('click', () => document.getElementById('modal-mcp').classList.remove('active'));
+document.getElementById('btn-cancel-mcp').addEventListener('click', () => document.getElementById('modal-mcp').classList.remove('active'));
+
+document.getElementById('btn-save-mcp').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('mcp-name').value.trim();
+    const command = document.getElementById('mcp-command').value.trim();
+    const rawArgs = document.getElementById('mcp-args').value.trim();
+    const args = rawArgs.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+
+    if (!name || !command) {
+        alert('请填写服务标识名称和命令！');
+        return;
+    }
+
+    const env = {};
+    document.querySelectorAll('.env-row').forEach(row => {
+        const k = row.querySelector('.env-k').value.trim();
+        const v = row.querySelector('.env-v').value.trim();
+        if (k) env[k] = v;
+    });
+
+    const res = await fetch('/api/mcp/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, command, args, env })
+    });
+    const data = await res.json();
+    if (data.success) {
+        showToast(`MCP 服务 ${name} 已保存并生效！`);
+        document.getElementById('modal-mcp').classList.remove('active');
+        await loadMcp();
+        filterAndRender();
+    } else {
+        alert('保存失败: ' + (data.error || '未知错误'));
+    }
+});
+
+// 探针测试按钮
+document.getElementById('btn-test-mcp').addEventListener('click', async () => {
+    const command = document.getElementById('mcp-command').value.trim();
+    const rawArgs = document.getElementById('mcp-args').value.trim();
+    const args = rawArgs.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const env = {};
+    document.querySelectorAll('.env-row').forEach(row => {
+        const k = row.querySelector('.env-k').value.trim();
+        const v = row.querySelector('.env-v').value.trim();
+        if (k) env[k] = v;
+    });
+
+    if (!command) {
+        alert('请先输入启动命令再进行测试！');
+        return;
+    }
+
+    const resEl = document.getElementById('mcp-test-result');
+    resEl.style.display = 'block';
+    resEl.className = 'test-result';
+    resEl.innerText = '正在启动子进程并进行 JSON-RPC 握手探针测试...';
+
+    const res = await fetch('/api/mcp/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command, args, env })
+    });
+    const data = await res.json();
+    if (data.success) {
+        resEl.className = 'test-result success';
+        let txt = `✅ 探针握手成功! (耗时: ${data.latencyMs}ms)\n已发现工具数: ${data.tools ? data.tools.length : 0}\n`;
+        if (data.tools && data.tools.length > 0) {
+            txt += '\n支持的 Tools 列表:\n';
+            data.tools.forEach(t => { txt += ` • ${t.name}: ${t.description || '无详细描述'}\n`; });
+        }
+        resEl.innerText = txt;
+    } else {
+        resEl.className = 'test-result error';
+        resEl.innerText = `❌ 测试失败: ${data.error}`;
+    }
+});
+
+function editMcp(name) {
+    const s = allMcpServers.find(x => x.name === name);
+    if (s) openAddMcpModal(s);
+}
+
+async function quickTestMcp(name) {
+    const s = allMcpServers.find(x => x.name === name);
+    if (!s) return;
+    openAddMcpModal(s);
+    setTimeout(() => {
+        document.getElementById('btn-test-mcp').click();
+    }, 200);
+}
+
+async function deleteMcp(name) {
+    if (!confirm(`确定要删除 MCP 服务 "${name}" 吗？`)) return;
+    const res = await fetch('/api/mcp/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+    });
+    const data = await res.json();
+    if (data.success) {
+        showToast(`已删除服务 ${name}`);
+        await loadMcp();
+        filterAndRender();
+    } else {
+        alert('删除失败: ' + data.error);
+    }
+}
+
+// --- Skill Modal 操作 ---
+function openAddSkillModal(existing = null) {
+    document.getElementById('modal-skill-title').innerText = existing ? '查看/编辑技能 (Skill)' : '新增智能体技能 (Skill)';
+    document.getElementById('skill-name').value = existing ? existing.name : '';
+    document.getElementById('skill-name').disabled = !!existing;
+    document.getElementById('skill-description').value = existing ? existing.description : '';
+    document.getElementById('skill-content').value = existing ? existing.content : '';
+    document.getElementById('modal-skill').classList.add('active');
+}
+
+document.getElementById('btn-close-skill').addEventListener('click', () => document.getElementById('modal-skill').classList.remove('active'));
+document.getElementById('btn-cancel-skill').addEventListener('click', () => document.getElementById('modal-skill').classList.remove('active'));
+
+document.getElementById('btn-save-skill').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('skill-name').value.trim();
+    const description = document.getElementById('skill-description').value.trim();
+    const content = document.getElementById('skill-content').value;
+    const scope = document.getElementById('skill-scope').value;
+    const workspacePath = document.getElementById('workspace-select').value;
+
+    if (!name || !description) {
+        alert('技能名称和触发描述不能为空！');
+        return;
+    }
+
+    const res = await fetch('/api/skills/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description, content, scope, workspacePath })
+    });
+    const data = await res.json();
+    if (data.success) {
+        showToast(`技能 ${name} 已生成！`);
+        document.getElementById('modal-skill').classList.remove('active');
+        await loadSkills();
+        filterAndRender();
+    } else {
+        alert('保存技能失败: ' + data.error);
+    }
+});
+
+function viewSkill(id) {
+    const s = allSkills.find(x => x.id === id);
+    if (s) openAddSkillModal(s);
+}
+
+async function deleteSkill(id, scope) {
+    if (!confirm(`确定要删除技能 "${id}" 吗？此操作将移除其整个技能目录。`)) return;
+    const workspacePath = document.getElementById('workspace-select').value;
+    const res = await fetch('/api/skills/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, scope, workspacePath })
+    });
+    const data = await res.json();
+    if (data.success) {
+        showToast(`已删除技能 ${id}`);
+        await loadSkills();
+        filterAndRender();
+    } else {
+        alert('删除失败: ' + data.error);
+    }
+}
+
+// --- 模版安装 Modal ---
+function startInstallTemplate(type, templateId) {
+    if (type === 'mcp') {
+        const tmpl = allTemplates.mcp.find(t => t.id === templateId);
+        if (!tmpl) return;
+
+        if (tmpl.fields && tmpl.fields.length > 0) {
+            // 需要用户补充参数
+            activeTemplateInstall = { type: 'mcp', templateId, tmpl };
+            document.getElementById('modal-tmpl-title').innerText = `安装 ${tmpl.name}`;
+            document.getElementById('modal-tmpl-desc').innerText = tmpl.description;
+            const container = document.getElementById('modal-tmpl-fields');
+            container.innerHTML = tmpl.fields.map(f => `
+                <div class="form-group">
+                    <label>${f.label} <span class="required">*</span></label>
+                    <input type="${f.secret ? 'password' : 'text'}" id="tmpl-input-${f.key}" value="${f.default || ''}" placeholder="请输入..." required />
+                </div>
+            `).join('');
+            document.getElementById('modal-template-install').classList.add('active');
+        } else {
+            // 无需输入参数，直接安装
+            confirmInstallTemplate('mcp', templateId, {});
+        }
+    } else if (type === 'skill') {
+        confirmInstallTemplate('skill', templateId, {});
+    }
+}
+
+async function confirmInstallTemplate(type, templateId, customValues) {
+    showToast(`正在安装模版...`);
+    const res = await fetch('/api/templates/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, templateId, customValues })
+    });
+    const data = await res.json();
+    if (data.success) {
+        showToast(`安装成功！已添加至您的配置中`);
+        document.getElementById('modal-template-install').classList.remove('active');
+        if (type === 'mcp') {
+            await loadMcp();
+            document.querySelector('[data-tab="mcp"]').click();
+        } else {
+            await loadSkills();
+            document.querySelector('[data-tab="skills"]').click();
+        }
+    } else {
+        alert('安装失败: ' + data.error);
+    }
+}
+
+document.getElementById('btn-close-tmpl').addEventListener('click', () => document.getElementById('modal-template-install').classList.remove('active'));
+document.getElementById('btn-cancel-tmpl').addEventListener('click', () => document.getElementById('modal-template-install').classList.remove('active'));
+document.getElementById('btn-confirm-tmpl').addEventListener('click', () => {
+    if (!activeTemplateInstall) return;
+    const customValues = {};
+    if (activeTemplateInstall.tmpl.fields) {
+        for (const f of activeTemplateInstall.tmpl.fields) {
+            const val = document.getElementById(`tmpl-input-${f.key}`).value.trim();
+            if (!val) {
+                alert(`请填写 ${f.label}`);
+                return;
+            }
+            customValues[f.key] = val;
+        }
+    }
+    confirmInstallTemplate(activeTemplateInstall.type, activeTemplateInstall.templateId, customValues);
+});
+
+// 页面初始化
+loadAllData();

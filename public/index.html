@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antigravity 扩展中心 - Skill & MCP Studio</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+    <div id="app">
+        <!-- 头部 Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <span class="logo-icon">🧩</span>
+                <div>
+                    <h1 class="app-title">Skill & MCP Studio</h1>
+                    <span class="app-subtitle">Antigravity 2.0 可视化扩展中心</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary btn-sm" id="btn-refresh" title="刷新状态">
+                    <span class="icon">🔄</span> 刷新
+                </button>
+                <button class="btn btn-primary btn-sm" id="btn-add-new">
+                    <span class="icon">➕</span> 新增配置
+                </button>
+            </div>
+        </header>
+
+        <!-- 导航选项卡 Tabs -->
+        <nav class="nav-tabs">
+            <button class="tab-item active" data-tab="mcp">
+                <span class="tab-icon">🔌</span> MCP 服务
+                <span class="badge" id="mcp-count">0</span>
+            </button>
+            <button class="tab-item" data-tab="skills">
+                <span class="tab-icon">⚡</span> 智能体技能
+                <span class="badge" id="skills-count">0</span>
+            </button>
+            <button class="tab-item" data-tab="templates">
+                <span class="tab-icon">🏪</span> 预设模版库
+            </button>
+        </nav>
+
+        <!-- 搜索与筛选 Search bar -->
+        <div class="filter-bar">
+            <div class="search-input-wrap">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="search-input" placeholder="搜索服务名称、命令或描述..." />
+            </div>
+            <div class="scope-selector" id="scope-selector-wrap" style="display: none;">
+                <label>工作区:</label>
+                <select id="workspace-select">
+                    <option value="">全部工作区 / 全局</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 主内容区 Main Content -->
+        <main class="app-content">
+            <!-- 1. MCP 面板 -->
+            <section class="tab-pane active" id="pane-mcp">
+                <div class="pane-header-tip">
+                    <span>💡 Model Context Protocol 服务向大模型注入实时数据库、文件系统、终端和外部 API 工具。</span>
+                </div>
+                <div class="card-grid" id="mcp-list">
+                    <div class="empty-state">正在加载 MCP 服务配置...</div>
+                </div>
+            </section>
+
+            <!-- 2. Skills 面板 -->
+            <section class="tab-pane" id="pane-skills">
+                <div class="pane-header-tip">
+                    <span>💡 技能 (Skills) 为智能体教授针对当前工程的多步骤操作规范、测试规程与自动化指南。</span>
+                </div>
+                <div class="card-grid" id="skills-list">
+                    <div class="empty-state">正在加载技能库...</div>
+                </div>
+            </section>
+
+            <!-- 3. Templates 模版库面板 -->
+            <section class="tab-pane" id="pane-templates">
+                <div class="pane-header-tip">
+                    <span>🚀 常用高质量 MCP 服务与技能模版，无需手写命令，一键装机即可使用。</span>
+                </div>
+                
+                <h3 class="section-title">🔌 热门 MCP 服务模版</h3>
+                <div class="card-grid" id="templates-mcp-list"></div>
+
+                <h3 class="section-title" style="margin-top: 24px;">⚡ 实用智能体技能模版</h3>
+                <div class="card-grid" id="templates-skills-list"></div>
+            </section>
+        </main>
+
+        <!-- 底部状态栏 Footer -->
+        <footer class="app-footer">
+            <div class="status-indicator">
+                <span class="status-dot online"></span>
+                <span id="footer-status">服务运行正常 · 配置修改即时生效</span>
+            </div>
+            <div class="footer-links">
+                <span id="footer-path" title="点击复制路径">~/.gemini/config</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 弹窗：新增/编辑 MCP 服务 Modal -->
+    <div class="modal-overlay" id="modal-mcp">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modal-mcp-title">新增 MCP 服务</h3>
+                <button class="btn-close" id="btn-close-mcp">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="form-mcp">
+                    <div class="form-group">
+                        <label>服务标识名称 (Name) <span class="required">*</span></label>
+                        <input type="text" id="mcp-name" placeholder="例如: sqlite, github, brave-search" required />
+                        <span class="form-hint">英文字母、数字和横杠，用于大模型识别该工具集的命名空间</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label>启动执行命令 (Command) <span class="required">*</span></label>
+                        <div class="input-with-presets">
+                            <input type="text" id="mcp-command" placeholder="例如: npx, python, node, uvx" required />
+                            <div class="quick-tags">
+                                <span class="tag-btn" onclick="document.getElementById('mcp-command').value='npx'">npx</span>
+                                <span class="tag-btn" onclick="document.getElementById('mcp-command').value='python'">python</span>
+                                <span class="tag-btn" onclick="document.getElementById('mcp-command').value='node'">node</span>
+                                <span class="tag-btn" onclick="document.getElementById('mcp-command').value='uvx'">uvx</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>执行参数列表 (Arguments，按行或空格分割)</label>
+                        <textarea id="mcp-args" rows="3" placeholder="-y&#10;@modelcontextprotocol/server-sqlite&#10;--db-path&#10;E:/my-database.db"></textarea>
+                        <span class="form-hint">每行一条参数，或以空格分隔；包含路径时无需手动转义反斜杠</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label>环境变量 (Environment Variables)</label>
+                        <div id="env-list" class="env-list"></div>
+                        <button type="button" class="btn btn-secondary btn-xs" id="btn-add-env">+ 添加环境变量</button>
+                    </div>
+
+                    <!-- 测试与结果栏 -->
+                    <div class="test-box" id="mcp-test-box">
+                        <div class="test-header">
+                            <span>🧪 联通性探针测试</span>
+                            <button type="button" class="btn btn-secondary btn-xs" id="btn-test-mcp">开始测试</button>
+                        </div>
+                        <div class="test-result" id="mcp-test-result" style="display: none;"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btn-cancel-mcp">取消</button>
+                <button class="btn btn-primary" id="btn-save-mcp">保存并生效</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：新增/编辑 Skill 技能 Modal -->
+    <div class="modal-overlay" id="modal-skill">
+        <div class="modal-card modal-lg">
+            <div class="modal-header">
+                <h3 id="modal-skill-title">新增智能体技能 (Skill)</h3>
+                <button class="btn-close" id="btn-close-skill">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="form-skill">
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label>技能名称 (Name) <span class="required">*</span></label>
+                            <input type="text" id="skill-name" placeholder="例如: code-reviewer, git-commit-helper" required />
+                            <span class="form-hint">小写字母与连字符</span>
+                        </div>
+                        <div class="form-group flex-1">
+                            <label>保存范围 (Scope)</label>
+                            <select id="skill-scope">
+                                <option value="global">🌐 全局通用 (~/.gemini/config/skills)</option>
+                                <option value="workspace">📁 当前项目 (.agents/skills)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>触发描述 (Description) <span class="required">*</span></label>
+                        <textarea id="skill-description" rows="2" placeholder="详细描述该技能的用途和何时应该被触发（用于大模型理解并自动激活）" required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>技能指南正文 (Markdown Instructions) <span class="required">*</span></label>
+                        <textarea id="skill-content" rows="10" placeholder="# 技能名称&#10;&#10;详细的分步操作指令、规范流程与排错指南..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btn-cancel-skill">取消</button>
+                <button class="btn btn-primary" id="btn-save-skill">创建技能</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：模版安装参数填写 Modal -->
+    <div class="modal-overlay" id="modal-template-install">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modal-tmpl-title">安装模版配置</h3>
+                <button class="btn-close" id="btn-close-tmpl">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="modal-tmpl-desc" class="modal-desc"></p>
+                <div id="modal-tmpl-fields"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btn-cancel-tmpl">取消</button>
+                <button class="btn btn-primary" id="btn-confirm-tmpl">立即安装</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提示消息 Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
