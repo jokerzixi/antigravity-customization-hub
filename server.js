@@ -139,6 +139,15 @@ function getWorkspaces() {
 const PRESET_TEMPLATES = {
     mcp: [
         {
+            id: 'drawio',
+            name: 'draw.io Diagramming (官方)',
+            description: 'draw.io 官方 MCP 服务：允许 AI 直接生成流程图、架构图、Mermaid、XML 并直接在 draw.io 编辑器中打开',
+            category: 'Diagramming',
+            command: 'npx',
+            args: ['-y', '@drawio/mcp'],
+            env: {}
+        },
+        {
             id: 'sqlite',
             name: 'SQLite Explorer',
             description: '轻量级 SQLite 本地数据库查询与数据表管理',
